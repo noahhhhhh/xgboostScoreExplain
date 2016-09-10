@@ -1,3 +1,7 @@
+logit <- function(x){
+    exp(x) / (1 + exp(x))
+}
+
 xgboostScoreExplain <- function(model, dt.try){
     ## TODO: different classes of cols, now it only supports numbers
     ## TODO: binary is no quite accurate
@@ -65,9 +69,7 @@ xgboostScoreExplain <- function(model, dt.try){
     dt.featuresWt <- Reduce(sumOnCommonCols, ls.featuresWt)
     dt.featuresWt <- dt.featuresWt[order(-abs(dt.featuresWt$N)), ]
     setDT(dt.featuresWt)
-    logit <- function(x){
-        exp(x) / (1 + exp(x))
-    }
+    
     
     pred <- logit(sum(dt.featuresWt$N))
     

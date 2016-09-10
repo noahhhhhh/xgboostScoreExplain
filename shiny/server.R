@@ -8,7 +8,6 @@
 #
 
 library(shiny)
-
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
    
@@ -35,7 +34,7 @@ shinyServer(function(input, output) {
       
   })
   
-  output$distPlot <- renderPlot({
+  output$expPlot <- renderPlot({
       
       # generate bins based on input$bins from ui.R
       x  <- faithful[, 2] 
@@ -48,19 +47,35 @@ shinyServer(function(input, output) {
           dt.play[[feature]] <- input[[paste0("input_", feature)]]
       }
       
-      colClass <- sapply(dt.play, class)
-      if("integer" %in% colClass){
-          dt.play[, colnames(dt.play[, colClass == "integer", with = F]) := lapply(.SD, as.numeric)
-                  , .SDcols = colnames(dt.play[, colClass == "integer", with = F])]
-      }
+      # colClass <- sapply(dt.play, class)
+      # if("integer" %in% colClass){
+      #     dt.play[, colnames(dt.play[, colClass == "integer", with = F]) := lapply(.SD, as.numeric)
+      #             , .SDcols = colnames(dt.play[, colClass == "integer", with = F])]
+      # }
+      # 
+      # m.play <- data.matrix(dt.play)
+      # dplay <- xgb.DMatrix(data = m.play)
+      # pred.play <- predict(md.xgb, dplay)
       
-      m.play <- data.matrix(dt.play)
-      dplay <- xgb.DMatrix(data = m.play)
-      pred.play <- predict(md.xgb, dplay)
+      new.ret.scoreExplain <- xgboostScoreExplain(md.xgb, dt.play)
       
       # draw the histogram with the specified number of bins
       hist(x, breaks = bins, col = 'darkgray', border = 'white')
-      abline(v = pred.play, col = "red")
+      abline(v = new.ret.scoreExplain$pred, col = "red")
+      text(new.ret.scoreExplain$pred)
+      
+      output$featuresWtTb <- renderTable({
+          
+          dt.play <- dt.try
+          for(feature in featuresWt.nonZero$featuresOnPath){
+              dt.play[[feature]] <- input[[paste0("input_", feature)]]
+          }
+          
+          new.ret.scoreExplain <- xgboostScoreExplain(md.xgb, dt.play)
+          
+          new.ret.scoreExplain$featuresWt
+          
+      })
       
   })
   
