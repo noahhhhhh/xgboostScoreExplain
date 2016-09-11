@@ -77,21 +77,6 @@ shinyServer(function(input, output) {
       # abline(v = new.ret.scoreExplain$pred, col = "red")
       # text(new.ret.scoreExplain$pred)
       
-      output$featuresWtTb <- renderTable({
-          
-          dt.play <- dt.try
-          for(feature in featuresWt.nonZero$featuresOnPath){
-              dt.play[[feature]] <- input[[paste0("input_", feature)]]
-          }
-          
-          new.ret.scoreExplain <- xgboostScoreExplain(md.xgb, dt.play)
-          
-          new.featuresWt.nonZero <- new.ret.scoreExplain$featuresWt[N != 0]
-          
-          new.featuresWt.nonZero
-          
-      })
-      
       output$featuresWtPlot <- renderPlot({
           
           dt.play <- dt.try
@@ -113,7 +98,10 @@ shinyServer(function(input, output) {
                  , aes(x = featuresOnPath
                        , y = N
                        , fill = featuresOnPath)) +
-              geom_bar(stat = "identity", position = "identity")
+              geom_bar(stat = "identity", position = "identity", show.legend = F) +
+              ylim(c(-.05, .05)) +
+              geom_text(aes(label = N,
+                            vjust = ifelse(N >= 0, 0, 1)))
           print(last_plot() + coord_flip())
           
           

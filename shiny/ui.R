@@ -29,7 +29,6 @@ shinyUI(fluidPage(
     # Show a plot of the generated distribution
     mainPanel(
        plotOutput("expPlot")
-       , tableOutput("featuresWtTb")
        , plotOutput("featuresWtPlot")
     )
   )
