@@ -59,10 +59,23 @@ shinyServer(function(input, output) {
       
       new.ret.scoreExplain <- xgboostScoreExplain(md.xgb, dt.play)
       
-      # draw the histogram with the specified number of bins
-      hist(x, breaks = bins, col = 'darkgray', border = 'white')
-      abline(v = new.ret.scoreExplain$pred, col = "red")
-      text(new.ret.scoreExplain$pred)
+      # exp plot
+      print(ggplot(data.exp, aes(x = x, y = y)) + 
+                geom_line() +
+                xlab("gain/quality/raw score") +
+                ylab("score") +
+                geom_hline(yintercept = new.ret.scoreExplain$pred) +
+                geom_text(data = data.table(x = 0, y = new.ret.scoreExplain$pred)
+                          , aes(x, y)
+                          , label = new.ret.scoreExplain$pred
+                          , hjust = 0
+                          , vjust = -1)
+      )
+      
+      # # draw the histogram with the specified number of bins
+      # hist(x, breaks = bins, col = 'darkgray', border = 'white')
+      # abline(v = new.ret.scoreExplain$pred, col = "red")
+      # text(new.ret.scoreExplain$pred)
       
       output$featuresWtTb <- renderTable({
           
@@ -73,7 +86,36 @@ shinyServer(function(input, output) {
           
           new.ret.scoreExplain <- xgboostScoreExplain(md.xgb, dt.play)
           
-          new.ret.scoreExplain$featuresWt
+          new.featuresWt.nonZero <- new.ret.scoreExplain$featuresWt[N != 0]
+          
+          new.featuresWt.nonZero
+          
+      })
+      
+      output$featuresWtPlot <- renderPlot({
+          
+          dt.play <- dt.try
+          for(feature in featuresWt.nonZero$featuresOnPath){
+              dt.play[[feature]] <- input[[paste0("input_", feature)]]
+          }
+          
+          new.ret.scoreExplain <- xgboostScoreExplain(md.xgb, dt.play)
+          
+          new.featuresWt.nonZero <- new.ret.scoreExplain$featuresWt[N != 0]
+          
+          new.featuresWt.nonZero
+          
+          new.new.featuresWt.nonZero <- new.featuresWt.nonZero
+          new.new.featuresWt.nonZero$featuresOnPath <- as.factor(new.new.featuresWt.nonZero$featuresOnPath)
+          new.new.featuresWt.nonZero$featuresOnPath <- factor(new.new.featuresWt.nonZero$featuresOnPath
+                                                      , levels = levels(new.new.featuresWt.nonZero$featuresOnPath)[order(abs(new.new.featuresWt.nonZero$N))])
+          ggplot(new.new.featuresWt.nonZero
+                 , aes(x = featuresOnPath
+                       , y = N
+                       , fill = featuresOnPath)) +
+              geom_bar(stat = "identity", position = "identity")
+          print(last_plot() + coord_flip())
+          
           
       })
       

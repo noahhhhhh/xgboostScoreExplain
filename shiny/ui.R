@@ -30,6 +30,7 @@ shinyUI(fluidPage(
     mainPanel(
        plotOutput("expPlot")
        , tableOutput("featuresWtTb")
+       , plotOutput("featuresWtPlot")
     )
   )
 ))
