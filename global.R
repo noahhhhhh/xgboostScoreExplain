@@ -18,4 +18,11 @@ x <- seq(-5, 5, by = .01)
 y <- logit(x)
 data.exp <- data.table(x = x, y = y)
 
-
+str <- character()
+for(i in 1:nrow(featuresWt.nonZero)){
+    str <- paste(str, paste0(featuresWt.nonZero[i]$featuresOnPath, ": ", featuresWt.nonZero[i]$N), "<br/>")
+}
+str <- paste(str, "------------------------------------", "<br/>")
+str <- paste(str, sum(featuresWt.nonZero$N), "<br/>")
+str <- paste("<div align='center'>", str, "</div>")
+HTML(str)
