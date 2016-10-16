@@ -19,10 +19,12 @@ shinyUI(fluidPage(
   sidebarLayout(
     sidebarPanel(
        uiOutput("inputs")
-    ),
+       , tags$hr()
+       , actionButton("reset_input", "Reset inputs")
+    )
     
     # Show a plot of the generated distribution
-    mainPanel(
+    , mainPanel(
        plotOutput("plots")
        , htmlOutput("texts", container = div)
     )

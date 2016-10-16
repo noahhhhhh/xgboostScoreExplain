@@ -5,6 +5,7 @@ require(gridExtra)
 shinyServer(function(input, output, session) {
    
   output$inputs <- renderUI({
+      input$reset_input
       lapply(featuresWt.nonZero$featuresOnPath, function(feature) {
           if(class(dt.try[[feature]]) == "numeric"){
               sliderInput(inputId = paste0("input_", feature)
@@ -42,8 +43,8 @@ shinyServer(function(input, output, session) {
       # exp plot
       plot.exp <- ggplot(data.exp, aes(x = x, y = y)) + 
           geom_line() +
-          xlab("gain/quality/raw score") +
-          ylab("score") +
+          xlab("Raw Score") +
+          ylab("Score") +
           geom_hline(yintercept = ls.ret$pred, colour="#990000", linetype="dashed") +
           annotate("text", label = ls.ret$pred, x = -4, y = ls.ret$pred + .1, colour = "red")
       

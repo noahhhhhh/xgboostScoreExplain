@@ -10,6 +10,11 @@ dtry <- xgb.DMatrix(data = m.try)
 pred.try <- predict(md.xgb, dtry)
 pred.try
 
+m.data <- data.matrix(data[, !c("Survived"), with = F])
+ddata <- xgb.DMatrix(data = m.data, missing = NaN)
+pred.data <- predict(md.xgb, ddata)
+pred.data
+
 ret.scoreExplain <- xgboostScoreExplain(md.xgb, dt.try)
 featuresWt.nonZero <- ret.scoreExplain$featuresWt[N != 0]
 
