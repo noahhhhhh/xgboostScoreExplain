@@ -390,9 +390,10 @@ myBinaryClassifierEffect <- function(probs,df,var.names,max.n=1e3,display=FALSE,
 }
 
 # shows the detail of how a score is calcualted given an xgboost model
-xgboostScoreDetail <- function(model, modelType = c("binaryClassification", "regression"), target, dt.singleRow){
-  ## TODO: different classes of cols, now it only supports numbers
-  ## TODO: binary is no quite accurate
+xgboostScoreDetail <- function(model, modelType = c("binaryClassification", "multiClassification", "regression"), target, dt.singleRow, nclasses = 0){
+
+  if(modelType == "multiClassification" & nclasses == 0) stop("multiClassfication model requires a valid nclasses!")
+
   require(plyr)
   require(data.table)
 
@@ -406,24 +407,63 @@ xgboostScoreDetail <- function(model, modelType = c("binaryClassification", "reg
   dt.tree <- dt.tree[order(as.double(dt.tree$Tree), as.double(gsub("[[:digit:]]-", "", dt.tree$ID)))]
 
   # search trees ------------------------------------------------------------
+  if(modelType == "multiClassification"){
+    ntrees <- max(dt.tree$Tree) + 1
+    nsteps <- ntrees / nclasses
 
-  ls.tree <- list()
-  ret <- list()
-  for(i in 1:(max(dt.tree$Tree) + 1)){
-    ls.tree[[i]] <- dt.tree[Tree == i - 1]
-    ret[[i]] <- walkThroughTree(ls.tree[[i]], dt.singleRow)
-    cat(paste(i, "\n"))
+    ls.multiTrees <- list()
+    for(class in 1:nclasses){
+      tree <- seq(class, ntrees, nclasses)
+      ls.multiTrees[[class]] <- dt.tree[Tree %in% (tree - 1)]
+    }
+
+    ls.classTree <- list()
+    for(j in 1:length(ls.multiTrees)){
+      ls.tree <- list()
+      ret <- list()
+
+      uniqueTrees <- unique(ls.multiTrees[[j]]$Tree)
+
+      for(i in 1:length(uniqueTrees)){
+        ls.tree[[i]] <- dt.tree[Tree == uniqueTrees[i]]
+        ret[[i]] <- walkThroughTree(ls.tree[[i]], dt.try)
+
+        # cat(paste("class:", j, "; tree:", i, "\n"))
+      }
+      ls.classTree[[j]] <- ret
+    }
+  } else{
+    ls.tree <- list()
+    ret <- list()
+    for(i in 1:(max(dt.tree$Tree) + 1)){
+      ls.tree[[i]] <- dt.tree[Tree == i - 1]
+      ret[[i]] <- walkThroughTree(ls.tree[[i]], dt.singleRow)
+      # cat(paste(i, "\n"))
+    }
   }
 
-
   # construct the individual feature importance table -----------------------
+  if(modelType == "multiClassification"){
+    ls.classFeatureWt <- list()
+    for(k in 1:length(ls.classTree)){
+      ls.featuresWt <- lapply(ls.classTree[[k]], function(x)x$featuresWt)
 
-  ls.featuresWt <- lapply(ret, function(x)x$featuresWt)
+      dt.featuresWt <- Reduce(sumOnCommonCols, ls.featuresWt)
+      dt.featuresWt <- dt.featuresWt[order(-abs(dt.featuresWt$weights)), ]
 
-  dt.featuresWt <- Reduce(sumOnCommonCols, ls.featuresWt)
-  dt.featuresWt <- dt.featuresWt[order(-abs(dt.featuresWt$weights)), ]
+      setDT(dt.featuresWt)
+      ls.classFeatureWt[[k]] <- dt.featuresWt
 
-  setDT(dt.featuresWt)
+    }
+  } else {
+    ls.featuresWt <- lapply(ret, function(x)x$featuresWt)
+
+    dt.featuresWt <- Reduce(sumOnCommonCols, ls.featuresWt)
+    dt.featuresWt <- dt.featuresWt[order(-abs(dt.featuresWt$weights)), ]
+
+    setDT(dt.featuresWt)
+  }
+
 
   # calculate the prediction ------------------------------------------------
 
@@ -431,23 +471,39 @@ xgboostScoreDetail <- function(model, modelType = c("binaryClassification", "reg
     pred <- logistic(sum(dt.featuresWt$weights))
   } else if(modelType == "regression"){
     pred <- sum(dt.featuresWt$weights)
+  } else if(modelType == "multiClassification"){
+    ls.rawScore <- list()
+    for(p in 1:length(ls.classFeatureWt)){
+      ls.rawScore[[p]] <- exp(sum(ls.classFeatureWt[[p]]$weights))
+    }
+
+    vec.probs <- unlist(ls.rawScore) / sum(unlist(ls.rawScore))
+    dt.probs <- data.table(class = 1:nclasses
+                           , probs = vec.probs)
+    pred <- dt.probs
   }
-
-
 
   # Overall feature importance ----------------------------------------------
 
   importance <- xgb.importance(feature_names = featureNames, model = model)
 
-  return(list(summaryTrees = ret
-              , featureWtsIndividual = dt.featuresWt
-              , pred = pred
-              , featureImportanceOverall = importance))
+  if(modelType == "multiClassification"){
+    return(list(summaryTrees = ls.classTree
+                , featureWtsIndividual = ls.classFeatureWt
+                , pred = pred
+                , featureImportanceOverall = importance))
+  } else{
+    return(list(summaryTrees = ret
+                , featureWtsIndividual = dt.featuresWt
+                , pred = pred
+                , featureImportanceOverall = importance))
+  }
+
 }
 
 
 # help to generate a shinyApp
-xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, target, sampleData, dt.singleRow){
+xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, modelType, target, sampleData, dt.singleRow, nclasses = 0){
   require(ggplot2)
   require(RColorBrewer)
   require(shiny)
@@ -771,6 +827,8 @@ xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, target, sampleD
 #' @return a list containing summaryTrees, featureWtsIndividual, pred, featureImportanceOverall and (shiny)
 #'
 #' @examples
+#' require(xgboost)
+#'
 #' # regression --------------
 #' data(mtcars)
 #'
@@ -796,10 +854,10 @@ xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, target, sampleD
 #' )
 #'
 #' dt.singleRow<- mtcars[1, ]
-#' m.try <- data.matrix(dt.singleObservation[, -1])
+#' m.try <- data.matrix(dt.singleRow[, -1])
 #' dtry <- xgb.DMatrix(data = m.try, label = dt.singleRow$mpg, missing = NaN)
 #'
-#' res <- xgboostScoreExplain(md.xgb, modelType = "regression", target = "mpg", dt.singleRow = dt.singleRow)
+#' res <- xgboostScoreExplain(model, modelType = "regression", target = "mpg", dt.singleRow = dt.singleRow)
 #'
 #' # binaryClassification --------------
 #' set.seed(42)
@@ -821,6 +879,64 @@ xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, target, sampleD
 #' res <- xgboostScoreExplain(model = model, modelType = "binaryClassification", target = "Species", dt.singleRow = xx, shiny = T, sampleData = x)
 #' res
 #'
+#'
+#' # multiClassification -----------------------------------------------------
+#' require(data.table)
+#' require(xgboost)
+#' require(caret)
+#' data(iris)
+#'
+#' setDT(iris)
+#'
+#' iris[, target := ifelse(Species == "setosa", 0
+#'                         , ifelse(Species == "versicolor", 1, 2))]
+#' iris[, Species := NULL]
+#'
+#' # add some noise
+#' set.seed(1)
+#' iris <- rbind(iris
+#'               , data.table(Sepal.Length = rnorm(20, mean = 4, 1)
+#'                            , Sepal.Width = rnorm(20, mean = 2, .5)
+#'                            , Petal.Length = rnorm(20, mean = 2, .1)
+#'                            , Petal.Width = rnorm(20, mean = 1, .01)
+#'                            , target = sample(0:2, 20, replace = T)
+#'               )
+#' )
+#'
+#' set.seed(1)
+#' ind.train <- createDataPartition(iris$target, p = .8, list = F)
+#' dt.train <- iris[ind.train]
+#' dt.valid <- iris[!ind.train]
+#'
+#' mx.train <- as.matrix(dt.train[, !c("target"), with = F])
+#' mx.valid <- as.matrix(dt.valid[, !c("target"), with = F])
+#'
+#' dmx.train <- xgb.DMatrix(data = mx.train, label = dt.train$target)
+#' dmx.valid <- xgb.DMatrix(data = mx.valid, label = dt.valid$target)
+#'
+#' watchlist <- list(valid = dmx.valid, train = dmx.train)
+#' params <- list(objective = "multi:softmax"
+#'                , booster = "gbtree"
+#'                , num_class = 3
+#'                , eta = 1)
+#'
+#' set.seed(1)
+#' mod <- xgb.train(params = params
+#'                  , data = dmx.train
+#'                  , watchlist = watchlist
+#'                  , nrounds = 10
+#'                  , verbose = 1
+#'                  , print.every.n = 1
+#'                  , early.stop.round = 3
+#'                  , maximize = F)
+#'
+#' dt.try <- dt.valid[, !c("target"), with = F][1]
+#' dt.try
+#'
+#' res <- xgboostScoreExplain(model = mod, modelType = "multiClassification", target = "target", dt.singleRow = dt.try, nclasses = 3, shiny = F, sampleData = x)
+#' res
+#'
+#'
 #' @seealso \code{\link{xgboostModel}}
 #'
 #' @import plyr
@@ -834,29 +950,29 @@ xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, target, sampleD
 #' @import FNN
 #' @export
 xgboostScoreExplain <- function(model
-                                , modelType = c("binaryClassification", "regression")
+                                , modelType = c("multiClassification", "binaryClassification", "regression")
                                 , target = "target"
                                 , dt.singleRow
+                                , nclasses = 3
                                 , shiny = F
-                                # , pplLikeYou = F
                                 , sampleData = NULL
                                 ){
-  ret.scoreExplain <- xgboostScoreDetail(model, modelType, target, dt.singleRow)
+  if(!modelType %in% c("binaryClassification", "multiClassification", "regression")) stop("Please specify a valid modelType")
+  if(modelType != "binaryClassification"){
+    shiny == F
+  }
+  ret.scoreExplain <- xgboostScoreDetail(model = model
+                                         , modelType = modelType
+                                         , target = target
+                                         , dt.singleRow = dt.singleRow
+                                         , nclasses = nclasses)
   if(shiny == T){
     if(is.null(sampleData)){
       warning("Need to provide sampleData and target if you set shiny = T!")
     } else{
-      # if(pplLikeYou == T){
-      #   cat("You've set pplLikeYou = T, this will take a long time for large sampleData!\n")
-      #   line <- readline("[Press 'Y' if you want to continue, otherwise 'N']\n")
-      #   if(line %in% c("Y", "y")){
-      #     pplLikeYou <- T
-      #   } else if(line %in% c("N", "n")){
-      #     pplLikeYou <- F
-      #   }
-      # }
       ret.shiny <- xgboostScoreExplainShinyApp(ret.scoreExplain = ret.scoreExplain
                                                , model = model
+                                               , modelType = modelType
                                                , target = target
                                                , sampleData = sampleData
                                                , dt.singleRow = dt.singleRow)
