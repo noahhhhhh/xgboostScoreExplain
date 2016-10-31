@@ -599,7 +599,6 @@ xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, modelType, targ
     sidebarLayout(
       sidebarPanel(
         uiOutput("inputs")
-        , br()
         , actionButton("reset", "Reset")
       ),
 
@@ -610,7 +609,6 @@ xgboostScoreExplainShinyApp <- function(ret.scoreExplain, model, modelType, targ
           , tabPanel("People Like You", plotOutput("radar"), tableOutput("pplLikeYou"))
           , tabPanel("Features"
                      , plotOutput("featurePlots", height = 150)
-                     , br()
                      , uiOutput("selectFeature")
                      , plotOutput("featureEffectPlots")
           )
@@ -967,7 +965,7 @@ xgboostScoreExplain <- function(model
                                          , dt.singleRow = dt.singleRow
                                          , nclasses = nclasses)
   if(shiny == T){
-    if(is.null(sampleData)){
+    if(is.null(sampleData) | is.null(target)){
       warning("Need to provide sampleData and target if you set shiny = T!")
     } else{
       ret.shiny <- xgboostScoreExplainShinyApp(ret.scoreExplain = ret.scoreExplain
